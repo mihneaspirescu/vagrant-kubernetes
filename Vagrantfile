@@ -6,15 +6,25 @@
 BOX_IMAGE = "centos/7"
 NODE_COUNT = 1
 
+
 Vagrant.configure("2") do |config|
+   config.vm.provider "virtualbox" do |v|
+    v.memory = 4096
+    v.cpus = 2
+  end
+
   config.vm.define "master" do |subconfig|
     subconfig.vm.box = BOX_IMAGE
     subconfig.vm.hostname = "master"
     subconfig.vm.network :private_network, ip: "10.0.0.10"
     
     #install nfs server
-    config.vm.provision "file", source: "./exports", destination: "~/exports"
-    config.vm.provision "shell", inline: <<-SHELL
+    subconfig.vm.provision "file", source: "./exports", destination: "~/exports"
+    subconfig.vm.provision "shell", inline: <<-SHELL
+
+      # NFS config for testing
+      # Installing all needed to expose an NFS share
+      
       yum install -y nfs-utils
       mkdir /nfs
       touch /nfs/test.file
@@ -24,6 +34,25 @@ Vagrant.configure("2") do |config|
       systemctl start nfs-server
       systemctl start rpcbind
       exportfs -arv
+
+      # Initiate the Kubernetes cluster
+      # This runs last as individual provisioners run last and this only applies to 
+      # the master node
+
+      kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=10.0.0.10 | tee /root/kubeadm.output
+      
+      # Configuring kubectl	
+      # This configures the kubectl under root user
+   
+      id	
+      mkdir -p $HOME/.kube
+      sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+      sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+      # Applying the kubernetes deployment for a flannel network
+      kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
+    
+
     SHELL
 
   end
@@ -33,6 +62,13 @@ Vagrant.configure("2") do |config|
       subconfig.vm.box = BOX_IMAGE
       subconfig.vm.hostname = "node#{i}"
       subconfig.vm.network :private_network, ip: "10.0.0.#{i + 10}"
+
+      subconfig.vm.provision "shell", inline: <<-SHELL
+            
+
+      SHELL
+
+
     end
   end
 
@@ -63,12 +99,13 @@ Vagrant.configure("2") do |config|
     systemctl restart docker
 
     swapoff -a
+    sed -i 's/^\/dev\/mapper\/VolGroup00-LogVol01 swap/#&/' /root/fstab
     sysctl --system
     setenforce 0
     yum install -y kubelet kubectl kubeadm
     systemctl enable kubelet && systemctl start kubelet
-    
-    #kubeadm init --pod-network-cidr=10.244.0.0/16
+   
+    #kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=10.0.0.10
     #kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
     
   SHELL
