@@ -47,3 +47,8 @@ Note that this also exposes an NFS server on the master for testing. It can be m
 ```
 mount -t nfs 10.0.0.10:/nfs /mnt 
 ```
+
+To cleanup just run
+```
+vagrant destroy
+```
