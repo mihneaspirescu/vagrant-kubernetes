@@ -50,8 +50,7 @@ Vagrant.configure("2") do |config|
       sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
       # Applying the kubernetes deployment for a flannel network
-      kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
-    
+      kubectl apply -f /vagrant/flannel.yml
 
     SHELL
 
