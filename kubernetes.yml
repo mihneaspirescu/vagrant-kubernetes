@@ -1,0 +1,138 @@
+---
+
+- hosts: all
+  name: Initial configuration
+  become: True
+  tasks:
+    - name: Add docker repo
+      shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo creates=/etc/yum.repos.d/docker-ce.repo
+
+    - name: Add kubernetes repo
+      copy: src=files/kubernetes.repo dest=/etc/yum.repos.d/kubernetes.repo
+
+    - name: Install packages
+      yum: name={{ item }} state=latest update_cache=yes
+      with_items:
+        - yum-utils
+        - device-mapper-persistent-data
+        - lvm2
+        - docker-ce
+        - kubelet-1.10.1-0
+        - kubectl-1.10.1-0
+        - kubeadm-1.10.1-0
+
+    - name: Remove swap
+      shell: "swapoff -a && touch /var/tmp/swapoff.ran"
+      args:
+        creates: /var/tmp/swapoff.ran
+
+    - name: Comment out swap config
+      replace:
+        path: /etc/fstab
+        regexp: '^/dev/mapper/VolGroup00-LogVol01'
+        replace: '#/dev/mapper/VolGroup00-LogVol01'
+        backup: yes
+
+    - name: Put selinux in Permissive
+      selinux: policy=targeted state=permissive
+
+    - name: Start and enable Docker
+      service: name=docker state=started enabled=yes
+    - name: Add docker group
+      group: name=docker state=present
+    - name: Add vagrant user to the docker group for easy docker access
+      user: name=vagrant append=yes groups=docker
+
+    - name: Update kernel props
+      sysctl:
+        name: "{{ item }}"
+        value: 1
+        sysctl_set: yes
+        state: present
+        reload: yes
+      with_items:
+        - net.bridge.bridge-nf-call-ip6tables
+        - net.bridge.bridge-nf-call-iptables 
+      notify:
+        - RESTART DOCKER
+
+    - name: Create folder for Docker config
+      file: > 
+        path=/etc/systemd/system/docker.service.d 
+        recurse=yes 
+        state=directory
+    - name: Copy docker config
+      copy: src=files/api.conf dest=/etc/systemd/system/docker.service.d/api.conf
+      notify: 
+        - RESTART DOCKER
+
+    - name: Run and enable kubernetes
+      service: > 
+        name=kubelet 
+        state=started 
+        enabled=yes
+
+  handlers:
+    - name: RESTART DOCKER
+      service: name=docker state=restarted daemon_reload=yes
+
+
+
+- name: Configure master
+  hosts: master
+  become: True
+  tasks:
+    - name: Initiate cluster
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=10.0.0.10 | tee /root/kubeadm.output
+      args:
+        creates: /root/kubeadm.output
+    - name: Crate kube config folder
+      file: path="{{ansible_env.HOME }}/.kube" state=directory 
+    - name: Copy the admin kubectl config
+      copy: >
+        src=/etc/kubernetes/admin.conf
+        dest="{{ ansible_env.HOME}}/.kube/config"
+        remote_src=yes
+    - name: Assign ownership
+      file: path="{{ ansible_env.HOME}}/.kube/config" owner=root group=root
+    
+    - name: Copy flannel config
+      copy: src=files/flannel.yml dest=/vagrant/flannel.yml
+
+    - name: Create flannel network
+      shell: kubectl apply -f /vagrant/flannel.yml && touch /var/tmp/flannel.ran
+      args:
+        creates: /var/tmp/flannel.ran
+
+
+
+    - name: get token
+      shell: kubeadm token list | sed -n '2p' | cut -d " " -f 1
+      register: TOKEN
+
+    - name: get certificate SHA
+      shell: openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -pubkey | openssl rsa -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+      register: CERT_SHA
+
+    - name: save SHA and token
+      set_fact:
+        token: "{{ TOKEN.stdout }}"
+        cert_sha: "{{ CERT_SHA.stdout }}"
+
+    - debug: var=hostvars[inventory_hostname].token
+    - debug: var=hostvars[inventory_hostname].cert_sha
+
+
+- name: Configure nodes
+  hosts: nodes
+  become: True
+  tasks: 
+    - name: Join master
+      shell: "kubeadm join 10.0.0.10:6443 --token {{ hostvars['master'].token }} --discovery-token-ca-cert-hash sha256:{{ hostvars['master'].cert_sha }} && touch /var/tmp/joined.ran"
+      args:
+        creates: /var/tmp/joined.ran
+
+
+
+
+
