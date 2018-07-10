@@ -99,7 +99,7 @@ If you make some changes to the provisioning section of the Vagrantfile just run
 vagrant provision
 ```
 
-###Notes
+### Notes
 
 To cleanup just run
 ```
