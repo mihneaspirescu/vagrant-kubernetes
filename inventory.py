@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/local/bin/python2
 # Adapted from Mark Mandel's implementation
 # https://github.com/ansible/ansible/blob/stable-2.1/contrib/inventory/vagrant.py
 # License: GNU General Public License, Version 3 <http://www.gnu.org/licenses/>

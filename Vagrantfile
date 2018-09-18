@@ -16,7 +16,7 @@ Vagrant.configure("2") do |config|
    config.vm.define "master" do |subconfig|
     subconfig.vm.box = BOX_IMAGE
     subconfig.vm.hostname = "master"
-    subconfig.vm.network :private_network, ip: "10.0.0.10"   
+    subconfig.vm.network :private_network, ip: "172.16.0.10"   
 
    end
 
@@ -25,7 +25,7 @@ Vagrant.configure("2") do |config|
     config.vm.define "node#{i}" do |subconfig|
       subconfig.vm.box = BOX_IMAGE
       subconfig.vm.hostname = "node#{i}"
-      subconfig.vm.network :private_network, ip: "10.0.0.#{i + 10}"
+      subconfig.vm.network :private_network, ip: "172.16.0.#{i + 10}"
 
      end
    end

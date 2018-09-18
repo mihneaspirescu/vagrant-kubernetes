@@ -83,7 +83,7 @@
   become: True
   tasks:
     - name: Initiate cluster
-      shell: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address=10.0.0.10 | tee /root/kubeadm.output
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-advertise-address={{ master_ip }} | tee /root/kubeadm.output
       args:
         creates: /root/kubeadm.output
     - name: Crate kube config folder
@@ -109,15 +109,19 @@
     - name: get token
       shell: kubeadm token list | sed -n '2p' | cut -d " " -f 1
       register: TOKEN
+      changed_when: False
 
     - name: get certificate SHA
-      shell: openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -pubkey | openssl rsa -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+      shell: "openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -pubkey | openssl rsa -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1"
       register: CERT_SHA
+      changed_when: False
 
     - name: save SHA and token
       set_fact:
         token: "{{ TOKEN.stdout }}"
         cert_sha: "{{ CERT_SHA.stdout }}"
+      changed_when: False
+
 
     - debug: var=hostvars[inventory_hostname].token
     - debug: var=hostvars[inventory_hostname].cert_sha
@@ -128,7 +132,7 @@
   become: True
   tasks: 
     - name: Join master
-      shell: "kubeadm join 10.0.0.10:6443 --token {{ hostvars['master'].token }} --discovery-token-ca-cert-hash sha256:{{ hostvars['master'].cert_sha }} && touch /var/tmp/joined.ran"
+      shell: "kubeadm join {{ master_ip }}:6443 --token {{ hostvars['master'].token }} --discovery-token-ca-cert-hash sha256:{{ hostvars['master'].cert_sha }} && touch /var/tmp/joined.ran"
       args:
         creates: /var/tmp/joined.ran
 
